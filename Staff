@@ -1,0 +1,526 @@
+package com.attendanttracking.Entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.sql.Date;
+import java.util.List;
+
+@Entity
+@Table
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+
+public class Staff {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+
+    private Integer staffId;
+    private String name;
+    private int positionId;
+    private String dept;
+    private String contact;
+    private String email;
+
+    @Lob
+    @Column(name = "image", length = 1000)
+    private byte[] image;
+    private Date hireDate;
+
+}
+
+
+package com.attendanttracking.Entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+
+public class AttendanceRecord {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer attendanceId;
+    private Integer staffId;
+    private LocalDateTime timeIN;
+    private LocalDateTime timeOUT;
+    private String status;
+    private LocalDate attendanceDate;
+
+}
+
+package com.attendanttracking.Repository;
+
+import com.attendanttracking.Entity.Staff;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+
+@Repository
+public interface StaffRepository extends JpaRepository<Staff, Integer> {
+    List<Staff> findByImage(byte[] uploadedImage );
+
+}
+
+package com.attendanttracking.Repository;
+
+import com.attendanttracking.Entity.AttendanceRecord;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface AttendanceRecordRepository extends JpaRepository<AttendanceRecord,Integer> {
+
+}
+
+package com.attendanttracking.Service;
+
+import com.attendanttracking.Entity.Staff;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.List;
+
+public interface StaffServices {
+
+
+    public String createStaffDetails(@RequestBody Staff staff, MultipartFile file) throws IOException;
+
+    public String updateStaffDetails(Staff staff);
+
+    public String deleteStaffDetails(Integer staffId);
+    public List<Staff> getAllStaffDetails();
+    public Staff getStaffDetails(Integer staffId);
+    public byte[] getStaffImage(Integer staffId);
+    public byte[] uploadImage(MultipartFile file) throws IOException;
+
+
+
+}
+
+package com.attendanttracking.Service;
+
+import com.attendanttracking.Entity.AttendanceRecord;
+import com.attendanttracking.Entity.Staff;
+
+import java.io.IOException;
+import java.util.List;
+
+
+
+public interface AttendanceRecordServices {
+    String createAttendanceRecordDetails(Integer staffId) throws IOException;
+    public String updateAttendanceRecordDetails(Staff staff);
+    public String deleteAttendanceRecordDetails(Integer attendanceId);
+    public List<AttendanceRecord> getAllAttendanceRecordDetails();
+    public AttendanceRecord getAttendanceRecordDetails(Integer attendanceId);
+
+
+}
+
+package com.attendanttracking.Service.Implements;
+
+
+import com.attendanttracking.Entity.Staff;
+import com.attendanttracking.Repository.StaffRepository;
+import com.attendanttracking.Service.StaffServices;
+import com.attendanttracking.Util.ImageUtil;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class StaffServiceImpl implements StaffServices {
+
+    @Autowired
+    private StaffRepository staffRepository;
+
+    @Autowired
+    private HttpServletRequest request;
+
+
+
+
+    public StaffServiceImpl(StaffRepository staffRepository) {
+        this.staffRepository = staffRepository;
+    }
+
+
+   
+    public String createStaffDetails(@RequestBody Staff staff, MultipartFile file) throws IOException {
+
+
+        byte[] compressedImage = ImageUtil.compressImage(file.getBytes());
+        staff.setImage(compressedImage);
+        System.out.println(compressedImage);
+
+        Staff savedStaff = staffRepository.save(staff);
+
+        if (savedStaff != null && savedStaff.getImage() != null) {
+            return "Successfully created staff: " +  savedStaff.getName() +" " + file.getOriginalFilename();
+
+        }else {
+            return "Failed to create staff";
+        }
+    }
+
+
+    @Override
+    public String updateStaffDetails(Staff staff) {
+        staffRepository.save(staff);
+        return "Success";
+    }
+    @Override
+    public byte[] uploadImage(MultipartFile file) throws IOException {
+        byte[] uploadedImage = file.getBytes();
+        return uploadedImage;
+    }
+
+
+    @Override
+    public String deleteStaffDetails(Integer staffId) {
+        staffRepository.deleteById(staffId);
+        return null;
+    }
+
+    @Override
+    public List<Staff> getAllStaffDetails() {
+        return staffRepository.findAll();
+
+    }
+    @Override
+    public Staff getStaffDetails(Integer staffId) {
+        Optional<Staff> dbStaffOptional = staffRepository.findById(staffId);
+
+        if (dbStaffOptional.isPresent()) {
+            Staff staff = dbStaffOptional.get();
+            if (staff.getImage() != null) {
+                byte[] decompressedImage = ImageUtil.decompressImage(staff.getImage());
+                staff.setImage(decompressedImage);
+            }
+            return staff;
+        }
+
+       return null;
+    }
+
+    public byte[] getStaffImage(Integer staffId) {
+        Optional<Staff> optionalStaff = staffRepository.findById(staffId);
+        if (optionalStaff.isPresent()) {
+            Staff staff = optionalStaff.get();
+            return ImageUtil.decompressImage(staff.getImage());
+        }
+        return null;
+    }
+}
+
+
+package com.attendanttracking.Service.Implements;
+
+
+import com.attendanttracking.Entity.AttendanceRecord;
+import com.attendanttracking.Entity.Staff;
+import com.attendanttracking.Repository.AttendanceRecordRepository;
+import com.attendanttracking.Repository.StaffRepository;
+import com.attendanttracking.Service.AttendanceRecordServices;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
+
+@Service
+public class AttendanceRecordsServicesImpl implements AttendanceRecordServices {
+
+    @Autowired
+    AttendanceRecordRepository attendanceRecordRepository;
+
+    @Autowired
+    StaffRepository staffRepository;
+
+    public AttendanceRecordsServicesImpl(AttendanceRecordRepository attendanceRecordRepository,
+                                         StaffRepository staffRepository) {
+        this.attendanceRecordRepository = attendanceRecordRepository;
+        this.staffRepository = staffRepository;
+    }
+
+
+
+
+    @Override
+    public String createAttendanceRecordDetails(@RequestBody Integer staffId)  {
+
+        Staff staff = new Staff();
+        Integer STAFF_ID = staff.getStaffId();
+        boolean recordExists = attendanceRecordRepository.existsById(STAFF_ID);
+
+        if(!recordExists) {
+
+            AttendanceRecord attendanceRecord = new AttendanceRecord();
+            attendanceRecord.setAttendanceDate(LocalDate.now());
+            attendanceRecord.setStaffId(STAFF_ID);
+
+            if(LocalTime.now().isBefore(LocalTime.of(14,0))){
+                attendanceRecord.setStatus("Present");
+                attendanceRecord.setTimeIN(LocalDateTime.now());
+            }
+            attendanceRecordRepository.save(attendanceRecord);
+            return "Attendance record created successfully";
+        }else {
+            AttendanceRecord existingRecord = attendanceRecordRepository.findById(STAFF_ID).get();
+            if(LocalTime.now().isAfter(LocalTime.of(17,0))){
+                existingRecord.setTimeOUT(LocalDateTime.now());
+
+            }
+            attendanceRecordRepository.save(existingRecord);
+            return "Attendance record updated successfully";
+        }
+
+    }
+
+    @Override
+    public String updateAttendanceRecordDetails(Staff staff) {
+        return "";
+    }
+
+
+
+    @Override
+    public String deleteAttendanceRecordDetails(Integer attendanceId) {
+        attendanceRecordRepository.deleteById(attendanceId);
+        return null;
+    }
+
+    @Override
+    public List<AttendanceRecord> getAllAttendanceRecordDetails() {
+        return attendanceRecordRepository.findAll();
+
+    }
+
+    @Override
+    public AttendanceRecord getAttendanceRecordDetails(Integer attendanceId) {
+        return attendanceRecordRepository.findById(attendanceId).get();
+    }
+
+}
+
+
+package com.attendanttracking.Controller;
+
+import com.attendanttracking.Entity.AttendanceRecord;
+import com.attendanttracking.Entity.Staff;
+import com.attendanttracking.Repository.StaffRepository;
+import com.attendanttracking.Service.AttendanceRecordServices;
+import com.attendanttracking.Service.StaffServices;
+
+import com.attendanttracking.Util.ImageUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.opencv.core.Mat;
+
+import javax.swing.text.html.parser.Entity;
+import java.io.IOException;
+import java.util.*;
+
+
+@RestController
+@RequestMapping("/staff")
+public class StaffController {
+
+
+    @Autowired
+    StaffServices staffServices;
+    @Autowired
+    AttendanceRecordServices attendanceRecordServices;
+    @Autowired
+    private StaffRepository staffRepository;
+
+    public StaffController(StaffServices staffServices) {
+        this.staffServices = staffServices;
+    }
+
+    @GetMapping("/uploadStaff/{staffId}")
+    public ResponseEntity<?> getStaffDetails(@PathVariable("staffId") Integer staffId) {
+        Staff staff = staffServices.getStaffDetails(staffId);
+        return ResponseEntity.status(HttpStatus.OK).body(staff);
+    }
+
+    @GetMapping("/allStaff")
+    public List<Staff> getAllStaffDetails() {
+        return staffServices.getAllStaffDetails();
+    }
+
+    @DeleteMapping("{staffId}")
+    public String deleteStaffDetail(@PathVariable("staffId") Integer staffId) {
+        staffServices.deleteStaffDetails(staffId);
+        return "Staff as been Deleted Successfully";
+    }
+
+    @PutMapping
+    public String updateStaffDetails(@RequestBody Staff staff) {
+        staffServices.updateStaffDetails(staff);
+        return "Staff as been Updated Successfully";
+    }
+
+
+    @PostMapping("/uploadStaff")
+    public ResponseEntity<?> createStaffDetails(@RequestParam("image") MultipartFile file, HttpServletRequest request) throws IOException {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Staff staff = objectMapper.readValue(request.getParameter("Staff"), Staff.class);
+
+        String uploadStaff = staffServices.createStaffDetails(staff, file);
+        return ResponseEntity.status(HttpStatus.OK)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(uploadStaff);
+    }
+
+
+    @GetMapping("/image/{staffId}")
+    public ResponseEntity<byte[]> getStaffImage(@PathVariable("staffId") Integer staffId) {
+        byte[] images = staffServices.getStaffImage(staffId);
+        if (images != null) {
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_JPEG)
+                    .body(images);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/uploadedImage")
+    public ResponseEntity<?> uploadImage(@RequestParam("file") MultipartFile file) {
+        try {
+            // Step 1: Process the uploaded image
+            byte[] uploadedImage = staffServices.uploadImage(file);
+            byte [] compressedImage = ImageUtil.compressImage(uploadedImage);
+
+//            Integer staffId = new Staff(staffRepository.findByImage(compressedImage));
+
+            List<Staff> staffId = staffRepository.findByImage(compressedImage);
+            System.out.println(staffId);
+
+            if (staffId != null) {
+                // Step 3: Retrieve staff details based on the staffId
+                Staff staff = new Staff();
+
+                if (staff != null) {
+                    // Step 4: Decompress the staff's image
+                    byte[] staffImage = ImageUtil.decompressImage(staff.getImage());
+
+                    // Step 5: Perform image comparison
+                    if (Arrays.equals(uploadedImage, staffImage)) {
+                        // Images match, create attendance record
+                        String result = attendanceRecordServices.createAttendanceRecordDetails(staff.getStaffId());
+                        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+                    } else {
+                        // Images do not match
+                        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body("Uploaded image does not match staff image");
+                    }
+                } else {
+                    // No staff member found for the given staffId
+                    return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body("No staff member found matching the provided staffId");
+                }
+            } else {
+                // No staffId found in session context
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not authenticated");
+            }
+        } catch (IOException e) {
+            // Error occurred while processing the uploaded image
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).build();
+        }
+    }
+
+
+package com.attendanttracking.Controller;
+
+import com.attendanttracking.Entity.AttendanceRecord;
+import com.attendanttracking.Entity.Staff;
+import com.attendanttracking.Repository.StaffRepository;
+import com.attendanttracking.Service.AttendanceRecordServices;
+import com.attendanttracking.Service.Implements.StaffServiceImpl;
+import com.attendanttracking.Service.StaffServices;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
+
+import static org.springframework.http.ResponseEntity.*;
+
+@RestController
+@RequestMapping("/attendanceRecord")
+public class AttendanceRecordController {
+
+
+    StaffServices staffServices;
+    AttendanceRecordServices attendanceRecordServices;
+
+    public AttendanceRecordController(AttendanceRecordServices attendanceRecordServices, StaffServices staffServices) {
+        this.attendanceRecordServices = attendanceRecordServices;
+
+    }
+
+
+
+    @DeleteMapping("{attendanceId}")
+    public String deleteAttendanceRecordDetails(@PathVariable("attendanceId") Integer attendanceId){
+        attendanceRecordServices.deleteAttendanceRecordDetails(attendanceId);
+        return "Attendance as been Deleted Successfully";
+    }
+    @GetMapping
+    List<AttendanceRecord> getAllAttendanceRecordDetails(Integer attendanceId){
+        return attendanceRecordServices.getAllAttendanceRecordDetails();
+    }
+    @GetMapping("{attendanceId}")
+    public AttendanceRecord getAttendanceRecordDetails(@PathVariable("attendanceId") Integer attendanceId){
+        return attendanceRecordServices.getAttendanceRecordDetails(attendanceId);
+    }
+}
+
+
